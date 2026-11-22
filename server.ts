@@ -632,7 +632,27 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   }
 
   /* Custom Restful API */
-  app.post('/rest/user/login', login())
+  //app.post('/rest/user/login', login())
+
+  // CHANGE made for DoS protection : per-IP rate limit on login
+  // @author Hayden Roy 3517336
+
+  if (process.env.DOS_PROTECTION === 'true') {
+    app.post('/rest/user/login',
+      rateLimit({
+        windowMs: 60 * 1000,
+        max: 100,             // Maximum 100 attempts per IP address
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: {error: 'Too many login attempts. Please try again later.'}
+      }),
+    login())
+  }
+  else {
+    app.post('/rest/user/login', login())
+  }
+  //END of CHANGE
+
   app.get('/rest/user/change-password', utils.asyncHandler(changePassword()))
   app.post('/rest/user/reset-password', utils.asyncHandler(resetPassword()))
   app.get('/rest/user/security-question', utils.asyncHandler(securityQuestion()))
