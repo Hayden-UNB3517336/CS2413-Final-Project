@@ -30,6 +30,7 @@ InferCreationAttributes<User>
   declare lastLoginIp: CreationOptional<string>
   declare profileImage: CreationOptional<string>
   declare totpSecret: CreationOptional<string>
+  declare lastUsedTotpStep: CreationOptional<number>
   declare isActive: CreationOptional<boolean>
 }
 
@@ -109,6 +110,11 @@ const UserModelInit = (sequelize: Sequelize) => { // vuln-code-snippet start wea
       totpSecret: {
         type: DataTypes.STRING,
         defaultValue: ''
+      },
+      lastUsedTotpStep: {
+        type: DataTypes.INTEGER,
+        defaultValue: -1,
+        allowNull: false
       },
       isActive: {
         type: DataTypes.BOOLEAN,
