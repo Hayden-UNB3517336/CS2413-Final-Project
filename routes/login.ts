@@ -13,6 +13,12 @@ import { UserModel } from '../models/user'
 import * as models from '../models/index'
 import { type User } from '../data/types'
 import * as utils from '../lib/utils'
+import {
+  getRateLimitKey,
+  checkLockout,
+  recordFailedAttempt,
+  recordSuccessfulAttempt
+} from '../lib/loginRateLimiter'
 
 // vuln-code-snippet start loginAdminChallenge loginBenderChallenge loginJimChallenge
 export function login () {
@@ -30,11 +36,20 @@ export function login () {
   }
 
   return (req: Request, res: Response, next: NextFunction) => {
+    const rateLimitKey = getRateLimitKey(req.body.email, req.ip)
+    const lockoutStatus = checkLockout(rateLimitKey)
+    if (lockoutStatus.locked) {
+      res.setHeader('Retry-After', String(lockoutStatus.retryAfterSeconds))
+      res.status(429).send(`Too many failed login attempts. Account locked. Try again in ${lockoutStatus.retryAfterSeconds} seconds.`)
+      return
+    }
+
     verifyPreLoginChallenges(req) // vuln-code-snippet hide-line
     models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true }) // vuln-code-snippet vuln-line loginAdminChallenge loginBenderChallenge loginJimChallenge
       .then((authenticatedUser) => { // vuln-code-snippet neutral-line loginAdminChallenge loginBenderChallenge loginJimChallenge
         const user = utils.queryResultToJson(authenticatedUser)
         if (user.data?.id && user.data.totpSecret !== '') {
+          recordSuccessfulAttempt(rateLimitKey)
           res.status(401).json({
             status: 'totp_token_required',
             data: {
@@ -45,9 +60,16 @@ export function login () {
             }
           })
         } else if (user.data?.id) {
+          recordSuccessfulAttempt(rateLimitKey)
           afterLogin(user.data, res, next)
         } else {
-          res.status(401).send(res.__('Invalid email or password.'))
+          const failureState = recordFailedAttempt(rateLimitKey)
+          if (failureState.locked) {
+            res.setHeader('Retry-After', String(failureState.retryAfterSeconds))
+            res.status(429).send(`Too many failed login attempts. Try again in ${failureState.retryAfterSeconds} seconds.`)
+          } else {
+            res.status(401).send(res.__('Invalid email or password.'))
+          }
         }
       }).catch((error: Error) => {
         next(error)
