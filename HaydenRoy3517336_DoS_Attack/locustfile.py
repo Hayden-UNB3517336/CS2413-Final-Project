@@ -1,3 +1,4 @@
+import uuid
 from locust import HttpUser, task, between
 
 class LoginUser(HttpUser):
@@ -8,6 +9,6 @@ class LoginUser(HttpUser):
 	def login(self):
 		self.client.post(
 			"/rest/user/login",
-			json={"email": "test@test.com", "password": "password123"},
+			json={"email": f"{uuid.uuid4()}@test.com", "password": "password123"},
 			name="POST /rest/user/login"
 		)
